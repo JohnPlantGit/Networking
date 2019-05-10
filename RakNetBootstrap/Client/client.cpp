@@ -1,7 +1,9 @@
 #include "Client.h"
 
-Client::Client()
+Client::Client(std::string ip, unsigned short port)
 {
+	m_ip = ip;
+	m_port = port;
 	HandleNetworkConnection();
 }
 
@@ -21,9 +23,9 @@ void Client::InitializeConnection()
 
 	m_peerInterface->Startup(1, &sd, 1);
 
-	printf("Connecting to server at: %s\n", m_ip);
+	printf("Connecting to server at: %s\n", m_ip.c_str());
 
-	RakNet::ConnectionAttemptResult result = m_peerInterface->Connect(m_ip, m_port, nullptr, 0);
+	RakNet::ConnectionAttemptResult result = m_peerInterface->Connect(m_ip.c_str(), m_port, nullptr, 0);
 
 	if (result != RakNet::CONNECTION_ATTEMPT_STARTED)
 	{
@@ -142,30 +144,37 @@ void Client::SendMessageToServer()
 				m_reconnecting.lock();
 
 				int serverIndex = std::stoi(parts[1]);
-
-				RakNet::SystemAddress saOld;
-				saOld.FromString("127.0.0.1|5457");
-				m_peerInterface->CloseConnection(saOld, true);
-				m_peerInterface->Shutdown(500);
-				RakNet::RakPeerInterface::DestroyInstance(m_peerInterface);
-
-				m_peerInterface = RakNet::RakPeerInterface::GetInstance();
-
-				std::stringstream tmp;
-				tmp << m_serverList[serverIndex - 1];
-				std::vector<std::string> result;
-
-				while (tmp.good())
+				if (serverIndex > 0 && serverIndex <= m_serverList.size())
 				{
-					std::string substr;
-					std::getline(tmp, substr, '|');
-					result.push_back(substr);
+					RakNet::SystemAddress saOld;
+					saOld.FromString("127.0.0.1|5457");
+					m_peerInterface->CloseConnection(saOld, true);
+					m_peerInterface->Shutdown(500);
+					RakNet::RakPeerInterface::DestroyInstance(m_peerInterface);
+
+					m_peerInterface = RakNet::RakPeerInterface::GetInstance();
+
+					std::stringstream tmp;
+					tmp << m_serverList[serverIndex - 1];
+					std::vector<std::string> result;
+
+					while (tmp.good())
+					{
+						std::string substr;
+						std::getline(tmp, substr, '|');
+						result.push_back(substr);
+					}
+
+					RakNet::SocketDescriptor sd;
+					m_peerInterface->Startup(1, &sd, 1);
+
+					m_peerInterface->Connect(result[0].c_str(), std::stoi(result[1].c_str()), nullptr, 0);
+
 				}
-
-				RakNet::SocketDescriptor sd;
-				m_peerInterface->Startup(1, &sd, 1);
-
-				m_peerInterface->Connect(result[0].c_str(), std::stoi(result[1].c_str()), nullptr, 0);
+				else
+				{
+					printf("Invalid index\n");
+				}
 
 				m_reconnecting.unlock();
 			}
@@ -198,6 +207,7 @@ void Client::StartConnectionLoop()
 		while (m_connectionLoop)
 		{
 			HandleNetworkMessages();
+			std::this_thread::sleep_for(std::chrono::milliseconds(100));
 		}
 	});
 
@@ -208,6 +218,11 @@ void Client::StartConnectionLoop()
 			SendMessageToServer();
 		}
 	});
+}
+
+void Client::StopConnectionLoop()
+{
+	m_connectionLoop = false;
 }
 
 std::vector<std::string> Client::RequestServerList()
@@ -221,7 +236,7 @@ std::vector<std::string> Client::RequestServerList()
 	printf("Sending Request\n");
 
 	m_waitingForServerList = true;
-	while (m_waitingForServerList) {}
+	//while (m_waitingForServerList) {}
 
 	return m_serverList;
 }

@@ -42,7 +42,7 @@ void ServerList::HandleNetworkMessages()
 		case ID_CONNECTION_LOST:
 			printf("Client lost connection\n");
 			break;
-		case ID_SERVER_LIST:
+		case ID_SERVER_LIST_REGISTER:
 			m_serverList.push_back(std::string(packet->systemAddress.ToString()));
 			break;
 		case ID_CLIENT_LIST_REQUEST:
@@ -72,6 +72,7 @@ void ServerList::StartConnectionLoop()
 		while (m_connectionLoop)
 		{
 			HandleNetworkMessages();
+			std::this_thread::sleep_for(std::chrono::milliseconds(100));
 		}
 	});
 }

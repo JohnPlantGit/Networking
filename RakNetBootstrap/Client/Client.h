@@ -12,16 +12,19 @@
 #include <BitStream.h>
 
 #include "../Server/GameMessages.h"
+
 class Client
 {
 public:
-	Client();
+	Client(std::string ip = "127.0.0.1", unsigned short port = 5457);
 	~Client();
 
 	void InitializeConnection();
 	void HandleNetworkConnection();
 	void HandleNetworkMessages();
+
 	void StartConnectionLoop();
+	void StopConnectionLoop();
 
 	void SendMessageToServer();
 
@@ -30,8 +33,8 @@ public:
 private:
 
 	RakNet::RakPeerInterface* m_peerInterface;
-	const char* m_ip = "127.0.0.1";
-	const unsigned short m_port = 5457;
+	std::string m_ip;
+	unsigned short m_port = 5457;
 
 	std::vector<std::string> m_serverList;
 	std::mutex m_reconnecting;

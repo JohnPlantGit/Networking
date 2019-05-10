@@ -21,7 +21,12 @@ bool Application2D::startup()
 	m_cameraY = 0;
 	m_timer = 0;
 
-	HandleNetworkConnection();
+	m_font = new aie::Font("font/consolas.ttf", 20);
+
+	m_client = new Client();
+	m_client->StartConnectionLoop();
+
+	m_refreshButton = new Button(glm::vec2(1200, 650), glm::vec2(50,50));
 
 	return true;
 }
@@ -29,6 +34,8 @@ bool Application2D::startup()
 void Application2D::shutdown() 
 {	
 	delete m_2dRenderer;
+	delete m_client;
+	delete m_refreshButton;
 }
 
 void Application2D::update(float deltaTime) 
@@ -38,7 +45,36 @@ void Application2D::update(float deltaTime)
 	// input example
 	aie::Input* input = aie::Input::getInstance();
 
-	HandleNetworkMessages();
+	if (input->wasMouseButtonPressed(0))
+	{
+		glm::vec2 mousePos(input->getMouseX(), input->getMouseY());
+		if (m_refreshButton->ContainsPoint(mousePos))
+		{
+			m_client->RequestServerList();
+		}
+		for (int i = 0; i < m_serverButtons.size(); i++)
+		{
+			if (m_serverButtons[i]->ContainsPoint(mousePos))
+			{
+
+			}
+		}
+	}
+
+	if (m_client->ServerListUpdate())
+	{
+		m_servers = m_client->GetServerList();
+		for (int i = 0; i < m_serverButtons.size(); i++)
+		{
+			delete m_serverButtons[i];
+		}
+		m_serverButtons.clear();
+		for (int i = 0; i < m_servers.size(); i++)
+		{
+			m_serverButtons.push_back(new Button(glm::vec2(150, 600 - (50 * i)), glm::vec2(200, 25)));
+		}
+	}
+	
 
 	// exit the application
 	if (input->isKeyDown(aie::INPUT_KEY_ESCAPE))
@@ -56,66 +92,18 @@ void Application2D::draw()
 	// begin drawing sprites
 	m_2dRenderer->begin();
 
+	for (int i = 0; i < m_servers.size(); i++)
+	{
+		m_serverButtons[i]->Draw(m_2dRenderer);
+		m_2dRenderer->setRenderColour(0, 0, 0);
+		m_2dRenderer->drawText(m_font, m_servers[i].c_str(), m_serverButtons[i]->GetPosition().x - 100, m_serverButtons[i]->GetPosition().y - 10);
+		m_2dRenderer->setRenderColour(1, 1, 1);
+
+	}
+
+
+	m_refreshButton->Draw(m_2dRenderer);
 
 	// done drawing sprites
 	m_2dRenderer->end();
-}
-
-void Application2D::HandleNetworkConnection()
-{
-	m_peerInterface = RakNet::RakPeerInterface::GetInstance();
-	InitialiseClientConnection();
-}
-
-void Application2D::InitialiseClientConnection()
-{
-	RakNet::SocketDescriptor sd;
-
-	m_peerInterface->Startup(1, &sd, 1);
-
-	printf("Connecting to server at: %s\n", IP);
-
-	RakNet::ConnectionAttemptResult result = m_peerInterface->Connect(IP, PORT, nullptr, 0);
-
-	if (result != RakNet::CONNECTION_ATTEMPT_STARTED)
-	{
-		printf("Unable to connect, id: %i", result);
-	}
-}
-
-void Application2D::HandleNetworkMessages()
-{
-	RakNet::Packet* packet = nullptr;
-
-	for (packet = m_peerInterface->Receive(); packet; m_peerInterface->DeallocatePacket(packet), packet = m_peerInterface->Receive())
-	{
-		switch (packet->data[0])
-		{
-		case ID_REMOTE_DISCONNECTION_NOTIFICATION:
-			printf("Other client disconnected\n");
-			break;
-		case ID_REMOTE_CONNECTION_LOST:
-			printf("Other client lost connection\n");
-			break;
-		case ID_REMOTE_NEW_INCOMING_CONNECTION:
-			printf("Other client connected\n");
-			break;
-		case ID_CONNECTION_REQUEST_ACCEPTED:
-			printf("Connected\n");
-			break;
-		case ID_NO_FREE_INCOMING_CONNECTIONS:
-			printf("Server full\n");
-			break;
-		case ID_DISCONNECTION_NOTIFICATION:
-			printf("We have been disconnected\n");
-			break;
-		case ID_CONNECTION_LOST:
-			printf("Connection lost\n");
-			break;
-
-		default:
-			printf("Unknown id: %i\n", packet->data[0]);
-			break;
-		}
-	}
 }
