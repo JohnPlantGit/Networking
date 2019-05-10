@@ -1,40 +1,29 @@
-#include <iostream>
-#include <string>
-#include <thread>
-#include <vector>
-#include <sstream>
-#include <mutex>
+#include "Client.h"
 
-#include <RakPeerInterface.h>
-#include <MessageIdentifiers.h>
-#include <BitStream.h>
-
-#include "../Server/GameMessages.h"
-
-RakNet::RakPeerInterface* m_peerInterface;
-const char* IP = "127.0.0.1";
-const unsigned short PORT = 5457;
-std::vector<std::string> m_servers;
-bool connected = false;
-std::mutex reconnecting;
-
-void InitialiseClientConnection();
-
-void HandleNetworkConnection()
+Client::Client()
 {
-	m_peerInterface = RakNet::RakPeerInterface::GetInstance();
-	InitialiseClientConnection();
+	HandleNetworkConnection();
 }
 
-void InitialiseClientConnection()
+Client::~Client()
+{
+	m_connectionLoop = false;
+
+	m_messageLoop.join();
+	m_networkLoop.join();
+
+	RakNet::RakPeerInterface::DestroyInstance(m_peerInterface);
+}
+
+void Client::InitializeConnection()
 {
 	RakNet::SocketDescriptor sd;
 
 	m_peerInterface->Startup(1, &sd, 1);
 
-	printf("Connecting to server at: %s\n", IP);
+	printf("Connecting to server at: %s\n", m_ip);
 
-	RakNet::ConnectionAttemptResult result = m_peerInterface->Connect(IP, PORT, nullptr, 0);
+	RakNet::ConnectionAttemptResult result = m_peerInterface->Connect(m_ip, m_port, nullptr, 0);
 
 	if (result != RakNet::CONNECTION_ATTEMPT_STARTED)
 	{
@@ -42,9 +31,15 @@ void InitialiseClientConnection()
 	}
 }
 
-void HandleNetworkMessages()
+void Client::HandleNetworkConnection()
 {
-	reconnecting.lock();
+	m_peerInterface = RakNet::RakPeerInterface::GetInstance();
+	InitializeConnection();
+}
+
+void Client::HandleNetworkMessages()
+{
+	m_reconnecting.lock();
 
 	RakNet::Packet* packet = nullptr;
 
@@ -63,7 +58,7 @@ void HandleNetworkMessages()
 			break;
 		case ID_CONNECTION_REQUEST_ACCEPTED:
 			printf("Connected\n");
-			connected = true;
+			m_connected = true;
 			break;
 		case ID_NO_FREE_INCOMING_CONNECTIONS:
 			printf("Server full\n");
@@ -87,7 +82,7 @@ void HandleNetworkMessages()
 			break;
 		}
 		case ID_CLIENT_LIST_RESPONSE:
-		{			
+		{
 			RakNet::BitStream bsIn(packet->data, packet->length, false);
 			bsIn.IgnoreBytes(sizeof(RakNet::MessageID));
 
@@ -98,13 +93,15 @@ void HandleNetworkMessages()
 			{
 				RakNet::RakString newString;
 				bsIn.Read(newString);
-				m_servers.push_back(std::string(newString.C_String()));
+				m_serverList.push_back(std::string(newString.C_String()));
 			}
 
-			for (int i = 0; i < m_servers.size(); i++)
+			for (int i = 0; i < m_serverList.size(); i++)
 			{
-				printf("%s\n", m_servers[i].c_str());				
+				printf("%s\n", m_serverList[i].c_str());
 			}
+
+			m_waitingForServerList = false;
 			break;
 		}
 
@@ -113,82 +110,64 @@ void HandleNetworkMessages()
 			break;
 		}
 	}
-	reconnecting.unlock();
+	m_reconnecting.unlock();
 }
 
-void SendMessageToServer()
+void Client::SendMessageToServer()
 {
-	while (true)
+	std::string input;
+	std::getline(std::cin, input);
+
+	if (!input.empty())
 	{
-		std::string input;
-		std::getline(std::cin, input);
-
-		if (!input.empty())
+		if (input == "/r")
 		{
-			if (input == "/r")
+			RequestServerList();
+		}
+		else if (input[0] == '/')
+		{
+			std::stringstream ss;
+			ss << input;
+			std::vector<std::string> parts;
+
+			while (ss.good())
 			{
-				m_servers.clear();
-
-				RakNet::BitStream bsOut;
-				bsOut.Write((RakNet::MessageID)GameMessages::ID_CLIENT_LIST_REQUEST);
-
-				m_peerInterface->Send(&bsOut, HIGH_PRIORITY, RELIABLE_ORDERED, 0, RakNet::UNASSIGNED_SYSTEM_ADDRESS, true);
-				printf("Sending Request\n");
+				std::string substr;
+				std::getline(ss, substr, ' ');
+				parts.push_back(substr);
 			}
-			else if (input[0] == '/')
-			{
-				std::stringstream ss;
-				ss << input;
-				std::vector<std::string> parts;
 
-				while (ss.good())
+			if (parts[0] == "/connect" && parts.size() > 1)
+			{
+				m_reconnecting.lock();
+
+				int serverIndex = std::stoi(parts[1]);
+
+				RakNet::SystemAddress saOld;
+				saOld.FromString("127.0.0.1|5457");
+				m_peerInterface->CloseConnection(saOld, true);
+				m_peerInterface->Shutdown(500);
+				RakNet::RakPeerInterface::DestroyInstance(m_peerInterface);
+
+				m_peerInterface = RakNet::RakPeerInterface::GetInstance();
+
+				std::stringstream tmp;
+				tmp << m_serverList[serverIndex - 1];
+				std::vector<std::string> result;
+
+				while (tmp.good())
 				{
 					std::string substr;
-					std::getline(ss, substr, ' ');
-					parts.push_back(substr);
+					std::getline(tmp, substr, '|');
+					result.push_back(substr);
 				}
 
-				if (parts[0] == "/connect" && parts.size() > 1)
-				{
-					reconnecting.lock();
+				RakNet::SocketDescriptor sd;
+				m_peerInterface->Startup(1, &sd, 1);
 
-					int serverIndex = std::stoi(parts[1]);
+				m_peerInterface->Connect(result[0].c_str(), std::stoi(result[1].c_str()), nullptr, 0);
 
-					RakNet::SystemAddress saOld;
-					saOld.FromString("127.0.0.1|5457");
-					m_peerInterface->CloseConnection(saOld, true);
-					m_peerInterface->Shutdown(500);
-					RakNet::RakPeerInterface::DestroyInstance(m_peerInterface);
-
-					m_peerInterface = RakNet::RakPeerInterface::GetInstance();
-
-					std::stringstream tmp;
-					tmp << m_servers[serverIndex - 1];
-					std::vector<std::string> result;
-
-					while (tmp.good())
-					{
-						std::string substr;
-						std::getline(tmp, substr, '|');
-						result.push_back(substr);
-					}
-
-					RakNet::SocketDescriptor sd;
-					m_peerInterface->Startup(1, &sd, 1);
-
-					m_peerInterface->Connect(result[0].c_str(), std::stoi(result[1].c_str()), nullptr, 0);
-
-					reconnecting.unlock();
-				}
-				else
-				{
-					RakNet::BitStream bs;
-					bs.Write((RakNet::MessageID)GameMessages::ID_CHAT_TEXT_MESSAGE);
-
-					bs.Write(input.c_str());
-
-					m_peerInterface->Send(&bs, HIGH_PRIORITY, RELIABLE_ORDERED, 0, RakNet::UNASSIGNED_SYSTEM_ADDRESS, true);
-				}
+				m_reconnecting.unlock();
 			}
 			else
 			{
@@ -200,29 +179,49 @@ void SendMessageToServer()
 				m_peerInterface->Send(&bs, HIGH_PRIORITY, RELIABLE_ORDERED, 0, RakNet::UNASSIGNED_SYSTEM_ADDRESS, true);
 			}
 		}
+		else
+		{
+			RakNet::BitStream bs;
+			bs.Write((RakNet::MessageID)GameMessages::ID_CHAT_TEXT_MESSAGE);
+
+			bs.Write(input.c_str());
+
+			m_peerInterface->Send(&bs, HIGH_PRIORITY, RELIABLE_ORDERED, 0, RakNet::UNASSIGNED_SYSTEM_ADDRESS, true);
+		}
 	}
 }
 
-int main()
+void Client::StartConnectionLoop()
 {
-	std::this_thread::sleep_for(std::chrono::seconds(2));
-
-	HandleNetworkConnection();
-
-	std::thread inputThread(SendMessageToServer);
-	std::thread requestThread([]
+	m_networkLoop = std::thread([this]
 	{
-		while (!connected) {}
-		RakNet::BitStream bsOut;
-		bsOut.Write((RakNet::MessageID)GameMessages::ID_CLIENT_LIST_REQUEST);
-
-		m_peerInterface->Send(&bsOut, HIGH_PRIORITY, RELIABLE_ORDERED, 0, RakNet::UNASSIGNED_SYSTEM_ADDRESS, true);
-		printf("Sending Request\n");				
+		while (m_connectionLoop)
+		{
+			HandleNetworkMessages();
+		}
 	});
-	while (true)
-	{
-		HandleNetworkMessages();		
-	}
 
-	return 0;
+	m_messageLoop = std::thread([this]
+	{
+		while (m_connectionLoop)
+		{
+			SendMessageToServer();
+		}
+	});
+}
+
+std::vector<std::string> Client::RequestServerList()
+{
+	m_serverList.clear();
+
+	RakNet::BitStream bsOut;
+	bsOut.Write((RakNet::MessageID)GameMessages::ID_CLIENT_LIST_REQUEST);
+
+	m_peerInterface->Send(&bsOut, HIGH_PRIORITY, RELIABLE_ORDERED, 0, RakNet::UNASSIGNED_SYSTEM_ADDRESS, true);
+	printf("Sending Request\n");
+
+	m_waitingForServerList = true;
+	while (m_waitingForServerList) {}
+
+	return m_serverList;
 }
