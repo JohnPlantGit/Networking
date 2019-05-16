@@ -1,4 +1,5 @@
 #include "Server.h"
+#include <fstream>
 
 Server::Server(unsigned short hostPort, std::string serverListIp, unsigned short serverListPort)
 {
@@ -6,11 +7,40 @@ Server::Server(unsigned short hostPort, std::string serverListIp, unsigned short
 	m_serverListIp = serverListIp;
 	m_serverListPort = serverListPort;
 
+	std::fstream file;
+	std::string filename = std::to_string(m_hostPort) + ".txt";
+	file.open(filename, std::fstream::in);
+	if (file.is_open())
+	{
+		while (file.good())
+		{
+			std::string systemAddress;
+			std::getline(file, systemAddress, ',');
+			std::string username;
+			std::getline(file, username);
+			if (!systemAddress.empty() && !username.empty())
+				m_usernames[systemAddress] = username;
+		}
+	}
+
+	file.close();
+
 	HandleNetworkConnection();
 }
 
 Server::~Server()
 {
+	std::fstream file;
+	std::string filename = std::to_string(m_hostPort) + ".txt";
+	file.open(filename, std::fstream::out);
+
+	if (file.is_open())
+	{
+		for (auto &pair : m_usernames)
+			file << pair.first << ',' << pair.second << '\n';
+	}
+
+	file.close();
 }
 
 void Server::InitializeConnection()
@@ -67,6 +97,10 @@ void Server::HandleNetworkMessages()
 			printf("Connected\n");
 			m_connected = true;
 			break;
+		case ID_UNCONNECTED_PONG:
+			printf("Pong\n");
+			m_connected = true;
+			break;
 		case ID_CHAT_TEXT_MESSAGE:
 		{
 			RakNet::BitStream bsIn(packet->data, packet->length, false);
@@ -91,7 +125,7 @@ void Server::HandleNetworkMessages()
 			}
 			bsOut.Write((RakNet::MessageID)GameMessages::ID_SERVER_TEXT_MESSAGE);
 			bsOut.Write(message.C_String());
-			m_peerInterface->Send(&bsOut, HIGH_PRIORITY, RELIABLE_ORDERED, 0, packet->systemAddress, true);
+			m_peerInterface->Send(&bsOut, HIGH_PRIORITY, RELIABLE_ORDERED, 0, /*packet->systemAddress*/RakNet::UNASSIGNED_SYSTEM_ADDRESS, true);
 
 			printf("%s\n", message.C_String());
 
@@ -140,5 +174,17 @@ void Server::SetUserName(std::vector<std::string> parts, RakNet::SystemAddress s
 	if (parts.size() > 1)
 	{
 		m_usernames[sa.ToString()] = parts[1];
+
+		std::fstream file;
+		std::string filename = std::to_string(m_hostPort) + ".txt";
+		file.open(filename, std::fstream::out);
+
+		if (file.is_open())
+		{
+			for (auto &pair : m_usernames)
+				file << pair.first << ',' << pair.second << '\n';
+		}
+
+		file.close();
 	}
 }
