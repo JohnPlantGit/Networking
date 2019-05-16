@@ -9,18 +9,18 @@ Client::Client(std::string ip, unsigned short port)
 
 Client::~Client()
 {
-	m_connectionLoop = false;
+	m_connectionLoop = false; // to stop the connection loop from running again
 
-	m_networkLoop.join();
+	m_networkLoop.join(); // waits for connection loop thread to stop
 
-	RakNet::RakPeerInterface::DestroyInstance(m_peerInterface);
+	RakNet::RakPeerInterface::DestroyInstance(m_peerInterface); // destroys the peer interface
 }
 
 void Client::InitializeConnection()
 {
 	printf("Connecting to server at: %s\n", m_ip.c_str());
 
-	RakNet::ConnectionAttemptResult result = m_peerInterface->Connect(m_ip.c_str(), m_port, nullptr, 0);
+	RakNet::ConnectionAttemptResult result = m_peerInterface->Connect(m_ip.c_str(), m_port, nullptr, 0); // connects the peer interface to the stored ip and port
 
 	if (result != RakNet::CONNECTION_ATTEMPT_STARTED)
 	{
@@ -34,7 +34,7 @@ void Client::HandleNetworkConnection()
 
 	RakNet::SocketDescriptor sd;
 
-	m_peerInterface->Startup(1, &sd, 1);
+	m_peerInterface->Startup(1, &sd, 1); // starts the peer interface as a pure client
 
 	InitializeConnection();
 }
@@ -73,31 +73,31 @@ void Client::HandleNetworkMessages()
 		case ID_CONNECTION_LOST:
 			printf("Connection lost\n");
 			break;
-		case ID_SERVER_TEXT_MESSAGE:
+		case ID_SERVER_TEXT_MESSAGE: // Receiving a text message from the server -OLD
 		{
 			RakNet::BitStream bsIn(packet->data, packet->length, false);
 			bsIn.IgnoreBytes(sizeof(RakNet::MessageID));
 
 			RakNet::RakString message;
-			bsIn.Read(message);
+			bsIn.Read(message); // read the data as a string
 
-			printf("%s\n", message.C_String());
+			printf("%s\n", message.C_String()); // prints the message
 
 			break;
 		}
-		case ID_CLIENT_LIST_RESPONSE:
+		case ID_CLIENT_LIST_RESPONSE: // Receiving the server list
 		{
 			RakNet::BitStream bsIn(packet->data, packet->length, false);
 			bsIn.IgnoreBytes(sizeof(RakNet::MessageID));
 
 			//bsIn.Read((char*)&m_servers, sizeof(std::vector<std::string>));
 			int count;
-			bsIn.Read(count);
+			bsIn.Read(count); // reads the amount of servers
 			for (int i = 0; i < count; i++)
 			{
 				RakNet::RakString newString;
-				bsIn.Read(newString);
-				m_serverList.push_back(std::string(newString.C_String()));
+				bsIn.Read(newString); // reads data as a string
+				m_serverList.push_back(std::string(newString.C_String())); // stores the string in the server list
 			}
 
 			for (int i = 0; i < m_serverList.size(); i++)
@@ -118,10 +118,12 @@ void Client::HandleNetworkMessages()
 
 void Client::StartConnectionLoop()
 {
-	m_connectionLoop = true;
 	if (m_networkLoop.joinable())
-		m_networkLoop.join();
-	m_networkLoop = std::thread([this]
+		m_networkLoop.join(); // checks that the network loop isn't already running
+
+	m_connectionLoop = true;
+	// runs handleNetworkMessages every 100 milliseconds in a seperate thread
+	m_networkLoop = std::thread([this] 
 	{
 		while (m_connectionLoop)
 		{
@@ -138,12 +140,12 @@ void Client::StopConnectionLoop()
 
 void Client::RequestServerList()
 {
-	m_serverList.clear();
+	m_serverList.clear(); // clears the old server list
 
 	RakNet::BitStream bsOut;
 	bsOut.Write((RakNet::MessageID)GameMessages::ID_CLIENT_LIST_REQUEST);
 
-	m_peerInterface->Send(&bsOut, HIGH_PRIORITY, RELIABLE_ORDERED, 0, RakNet::UNASSIGNED_SYSTEM_ADDRESS, true);
+	m_peerInterface->Send(&bsOut, HIGH_PRIORITY, RELIABLE_ORDERED, 0, RakNet::UNASSIGNED_SYSTEM_ADDRESS, true); // sends a packet just containing the ID_CLIENT_LIST_REQUEST Message 
 	printf("Sending Request\n");
 }
 

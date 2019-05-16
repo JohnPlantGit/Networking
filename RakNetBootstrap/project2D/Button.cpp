@@ -11,11 +11,6 @@ Button::~Button()
 {
 }
 
-void Button::Update()
-{
-
-}
-
 void Button::Draw(aie::Renderer2D* renderer)
 {
 	renderer->drawBox(m_position.x, m_position.y, m_size.x, m_size.y);

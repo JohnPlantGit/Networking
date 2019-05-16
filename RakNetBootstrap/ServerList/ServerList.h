@@ -15,11 +15,25 @@
 class ServerList
 {
 public:
+	/*
+		@brief start the server list
+		@param the port to use
+		@param the maximum amount of connections
+	*/
 	ServerList(unsigned short port = 5457, unsigned int maxConnections = 10);
 	~ServerList();
 
+	/*
+		@brief Start the peer interface
+	*/
 	void HandleNetworkConnection();
+	/*
+		@brief Processes packets recieved by the peer interface
+	*/
 	void HandleNetworkMessages();
+	/*
+		@brief Runs HandleNetworkMessages on loop in a seperate thread
+	*/
 	void StartConnectionLoop();
 
 private:

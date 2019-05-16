@@ -21,8 +21,8 @@ void ServerList::HandleNetworkConnection()
 
 	RakNet::SocketDescriptor sd(m_port, 0);
 
-	m_peerInterface->Startup(m_maxConnections, &sd, 1);
-	m_peerInterface->SetMaximumIncomingConnections(m_maxConnections);
+	m_peerInterface->Startup(m_maxConnections, &sd, 1); // start the server list
+	m_peerInterface->SetMaximumIncomingConnections(m_maxConnections); // set the max connections
 }
 
 void ServerList::HandleNetworkMessages()
@@ -42,20 +42,20 @@ void ServerList::HandleNetworkMessages()
 		case ID_CONNECTION_LOST:
 			printf("Client lost connection\n");
 			break;
-		case ID_SERVER_LIST_REGISTER:
-			m_serverList.push_back(std::string(packet->systemAddress.ToString()));
+		case ID_SERVER_LIST_REGISTER: // When a server wishes to register with the server list
+			m_serverList.push_back(std::string(packet->systemAddress.ToString())); // store the system address of the server in the server list
 			break;
-		case ID_CLIENT_LIST_REQUEST:
+		case ID_CLIENT_LIST_REQUEST: // When a client requests the server list
 		{
 			RakNet::BitStream bs;
 			bs.Write((RakNet::MessageID)GameMessages::ID_CLIENT_LIST_RESPONSE);
-			bs.Write((int)m_serverList.size());
-			for (int i = 0; i < m_serverList.size(); i++)
+			bs.Write((int)m_serverList.size()); // writes the amount of servers in the list
+			for (int i = 0; i < m_serverList.size(); i++) // writes each of the system addresses in the server list
 			{
 				bs.Write(m_serverList[i].c_str());
 			}
 
-			m_peerInterface->Send(&bs, HIGH_PRIORITY, RELIABLE_ORDERED, 0, packet->systemAddress, false);
+			m_peerInterface->Send(&bs, HIGH_PRIORITY, RELIABLE_ORDERED, 0, packet->systemAddress, false); // sends the pack back to the client that requested it
 			break;
 		}
 		default:
@@ -67,6 +67,7 @@ void ServerList::HandleNetworkMessages()
 
 void ServerList::StartConnectionLoop()
 {
+	// runs handleNetworkMessages every 100 milliseconds in a seperate thread
 	m_networkLoop = std::thread([this]
 	{
 		while (m_connectionLoop)

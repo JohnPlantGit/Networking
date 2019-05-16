@@ -52,21 +52,23 @@ void Application2D::update(float deltaTime)
 	// input example
 	aie::Input* input = aie::Input::getInstance();
 
+	// basic state machine for being in the lobby or being in game
 	if (m_inLobby)
 	{
-		if (input->wasMouseButtonPressed(0))
+		if (input->wasMouseButtonPressed(0)) // if the user left cliked
 		{
 			glm::vec2 mousePos(input->getMouseX(), input->getMouseY());
-			if (m_refreshButton->ContainsPoint(mousePos))
+			if (m_refreshButton->ContainsPoint(mousePos)) // if the user clicked the refresh button
 			{
-				m_client->RequestServerList();
+				m_client->RequestServerList(); // request a new server list
 			}
-			for (int i = 0; i < m_serverButtons.size(); i++)
+			for (int i = 0; i < m_serverButtons.size(); i++) // for each server list button
 			{
-				if (m_serverButtons[i]->ContainsPoint(mousePos))
+				if (m_serverButtons[i]->ContainsPoint(mousePos)) // if the user clicked a server
 				{
-					m_inLobby = false;
+					m_inLobby = false; // take the application out of the lobby
 					
+					// split the string into ip and port
 					std::stringstream tmp;
 					tmp << m_servers[i];
 					std::vector<std::string> result;
@@ -77,70 +79,69 @@ void Application2D::update(float deltaTime)
 						std::getline(tmp, substr, '|');
 						result.push_back(substr);
 					}
+					//
 
+					// if there are atleast 2 sub strings
 					if (result.size() >= 2)
-						InitializeConnection(result[0], std::stoi(result[1].c_str()));
+						InitializeConnection(result[0], std::stoi(result[1].c_str())); // run the connection function on the ip and port
 
-					m_client->StopConnectionLoop();
+					m_client->StopConnectionLoop(); // stop the client from updating
 				}
 			}
 		}
 
-		if (m_client->ServerListUpdate())
+		if (m_client->ServerListUpdate()) // if the client has an updated serverlist
 		{
-			m_servers = m_client->GetServerList();
+			m_servers = m_client->GetServerList(); 
 			for (int i = 0; i < m_serverButtons.size(); i++)
 			{
-				delete m_serverButtons[i];
+				delete m_serverButtons[i]; // delete the old buttons
 			}
 			m_serverButtons.clear();
 			for (int i = 0; i < m_servers.size(); i++)
 			{
-				m_serverButtons.push_back(new Button(glm::vec2(150, 600 - (50 * i)), glm::vec2(200, 25)));
+				m_serverButtons.push_back(new Button(glm::vec2(150, 600 - (50 * i)), glm::vec2(200, 25))); // create a new button for each server in the list
 			}
 		}
 	}
-	else
+	else // if in game
 	{
 		HandleNetworkMessages();
 
-		std::vector<unsigned int> pressedChars = input->getPressedCharacters();
+		std::vector<unsigned int> pressedChars = input->getPressedCharacters(); // get the currenly pressed characters
 
 		if (!pressedChars.empty())
-			m_inputString.push_back(pressedChars[0]);
+			m_inputString.push_back(pressedChars[0]); // add the first char to the input string
 
-		if (input->wasKeyPressed(aie::INPUT_KEY_BACKSPACE))
+		if (input->wasKeyPressed(aie::INPUT_KEY_BACKSPACE)) // takes off a letter when backspace is pressed
 		{
 			m_inputString.pop_back();
 		}
 
-		if (input->wasKeyPressed(aie::INPUT_KEY_ENTER) && input->wasKeyPressed(aie::INPUT_KEY_KP_ENTER) && !m_inputString.empty())
+		// when enter is pressed and the input string has characters in it
+		if ((input->wasKeyPressed(aie::INPUT_KEY_ENTER) || input->wasKeyPressed(aie::INPUT_KEY_KP_ENTER)) && !m_inputString.empty())
 		{
 			RakNet::BitStream bs;
-			bs.Write((RakNet::MessageID)GameMessages::ID_CHAT_TEXT_MESSAGE);
+			bs.Write((RakNet::MessageID)GameMessages::ID_CHAT_TEXT_MESSAGE); // setup text message packet
 
-			bs.Write(m_inputString.c_str());
+			bs.Write(m_inputString.c_str()); // write the string to the bitstream
 
-			m_peerInterface->Send(&bs, HIGH_PRIORITY, RELIABLE_ORDERED, 0, RakNet::UNASSIGNED_SYSTEM_ADDRESS, true);
+			m_peerInterface->Send(&bs, HIGH_PRIORITY, RELIABLE_ORDERED, 0, RakNet::UNASSIGNED_SYSTEM_ADDRESS, true); // send the bitstream to the server
 
-			m_inputString.clear();
+			m_inputString.clear(); // clear the old input
 		}
 
-		if (input->wasKeyPressed(aie::INPUT_KEY_ESCAPE))
+		if (input->wasKeyPressed(aie::INPUT_KEY_ESCAPE)) // when the escape key is pressed
 		{
-			m_inLobby = true;
+			m_inLobby = true; // return back to the lobby
 
-			Disconnect();
+			Disconnect(); // disconnect from the current server
 
-			m_client->StartConnectionLoop();
+			m_client->StartConnectionLoop(); // start the client loop back up
 
-			m_chatLog.clear();
+			m_chatLog.clear(); // clear the char log
 		}
 	}	
-
-	// exit the application
-	/*if (input->isKeyDown(aie::INPUT_KEY_ESCAPE))
-		quit();*/
 }
 
 void Application2D::draw() 
@@ -156,6 +157,7 @@ void Application2D::draw()
 
 	if (m_inLobby)
 	{
+		// draw the button and text for each server
 		for (int i = 0; i < m_servers.size(); i++)
 		{
 			m_serverButtons[i]->Draw(m_2dRenderer);
@@ -165,13 +167,13 @@ void Application2D::draw()
 
 		}
 
-		m_refreshButton->Draw(m_2dRenderer);
+		m_refreshButton->Draw(m_2dRenderer); // draw the refresh button
 	}
 	else
 	{
-		m_2dRenderer->drawText(m_font, m_inputString.c_str(), 100, 100);
+		m_2dRenderer->drawText(m_font, m_inputString.c_str(), 100, 100); // draw the input string
 		
-		for (int i = 0; i < m_chatLog.size(); i++)
+		for (int i = 0; i < m_chatLog.size(); i++) // draw the chat log
 		{
 			m_2dRenderer->drawText(m_font, m_chatLog[i].c_str(), 100, 140 + (40 * (m_chatLog.size() - i)));
 		}
@@ -183,25 +185,17 @@ void Application2D::draw()
 
 void Application2D::InitializeConnection(std::string ip, unsigned short port)
 {
-	if (m_peerInterface)
+	if (m_peerInterface) // if the peer interface is already connected to something
 	{
-		Disconnect();
+		Disconnect(); // disconnect the peer interface
 	}
 
+	// start up a new peer interface
 	m_peerInterface = RakNet::RakPeerInterface::GetInstance();
 	RakNet::SocketDescriptor sd(m_port, "127.0.0.1");
 	m_peerInterface->Startup(1, &sd, 1);
 
-	m_peerInterface->Connect(ip.c_str(), port, nullptr, 0);
-}
-
-void Application2D::HandleNetworkConnection()
-{
-	m_peerInterface = RakNet::RakPeerInterface::GetInstance();
-
-	RakNet::SocketDescriptor sd;
-
-	m_peerInterface->Startup(1, &sd, 1);
+	m_peerInterface->Connect(ip.c_str(), port, nullptr, 0); // connect to the ip and port params
 }
 
 void Application2D::HandleNetworkMessages()
@@ -236,15 +230,15 @@ void Application2D::HandleNetworkMessages()
 		case ID_CONNECTION_LOST:
 			printf("Connection lost\n");
 			break;
-		case ID_SERVER_TEXT_MESSAGE:
+		case ID_SERVER_TEXT_MESSAGE: // When receiving a text message from the server
 		{
 			RakNet::BitStream bsIn(packet->data, packet->length, false);
 			bsIn.IgnoreBytes(sizeof(RakNet::MessageID));
 
 			RakNet::RakString message;
-			bsIn.Read(message);
+			bsIn.Read(message); //read the message
 
-			m_chatLog.push_back(std::string(message.C_String()));
+			m_chatLog.push_back(std::string(message.C_String())); // add the message to the chat log
 
 			break;
 		}

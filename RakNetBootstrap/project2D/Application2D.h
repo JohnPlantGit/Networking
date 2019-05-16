@@ -17,15 +17,36 @@ public:
 	Application2D();
 	virtual ~Application2D();
 
+	/*
+		@brief Waits for the user to input a port to use and starts up the client's connection loop
+		@return if the application should continue to start
+	*/
 	virtual bool startup();
 	virtual void shutdown();
 
+	/*
+		@brief While in the lobby, allows the user to refresh the server list and choose a server to connect to
+		@brief While in game, allows the user to send text messages to the server
+	*/
 	virtual void update(float deltaTime);
+	/*
+		@brief draws buttons and text
+	*/
 	virtual void draw();
 
+	/*
+		@brief starts up the peer interface and connects to a server user the ip and port
+		@param the ip to connect to
+		@param the port to connect to
+	*/
 	void InitializeConnection(std::string ip, unsigned short port);
-	void HandleNetworkConnection();
+	/*
+		@brief Processes packets recieved by the peer interface
+	*/
 	void HandleNetworkMessages();
+	/*
+		@brief Shuts down the peer interface
+	*/
 	void Disconnect();
 
 protected:

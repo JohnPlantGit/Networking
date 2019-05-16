@@ -7,7 +7,13 @@ public:
 	GameObject();
 	~GameObject();
 
+	/*
+		@brief Handles any updates needed for the game object
+	*/
 	virtual void Update() {};
+	/*
+		@brief Renders the gameobject
+	*/
 	virtual void Draw(aie::Renderer2D* renderer) {};
 
 protected:
